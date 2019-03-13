@@ -40,6 +40,8 @@ import org.jetbrains.annotations.NotNull;
 
 import javax.annotation.Nullable;
 
+// re-broadcast on bitcoinj just happen when the app is restarted
+
 @Slf4j
 public class TxBroadcaster {
     public interface Callback {
@@ -51,7 +53,7 @@ public class TxBroadcaster {
                 log.warn("TxBroadcaster.onTimeout called: {} \n" +
                                 "We optimistically assume that the tx broadcast succeeds later and call onSuccess on the " +
                                 "callback handler. This behaviour carries less potential problems than if we would trigger " +
-                                "a failure (e.g. which would cause a failed create offer attempt of failed take offer attempt).\n" +
+                                "a failure (e.g. which would cause a failed create offer attempt or failed take offer attempt).\n" +
                                 "We have no guarantee how long it will take to get the information that sufficiently many BTC " +
                                 "nodes have reported back to BitcoinJ that the tx is in their mempool.\n" +
                                 "In normal situations " +
@@ -131,14 +133,20 @@ public class TxBroadcaster {
                             // before the caller is finished.
                             UserThread.execute(() -> callback.onSuccess(tx));
                         } else {
-                            stopAndRemoveTimer(txId);
+                            stopAndRemoveTimer(txId); //useless - txId was already removed.
                             log.warn("We got an onSuccess callback for a broadcast which already triggered the timeout.", txId);
                         }
                     } else {
+                        // unreachable code. in case of a maleability attack it will depend on what tx wins the broadcast race, this will either
+                        // end on a success or a timeout.
+                        // the only piece of code that will notice the maleability attack might the wallet: it might be invoked with
+                        // receivePending() and will notice 2 tx "in conflict" but
                         stopAndRemoveTimer(txId);
                         UserThread.execute(() -> callback.onTxMalleability(new TxMalleabilityException(tx, result)));
                     }
                 } else {
+                    // unreachable code. Supplied tx in peerGroup.broadcastTransaction(tx) should be null for
+                    // this to happen, but even then a NullPointerException will happen before.
                     stopAndRemoveTimer(txId);
                     UserThread.execute(() -> callback.onFailure(new TxBroadcastException("Transaction returned from the " +
                             "broadcastTransaction call back is null.", txId)));
