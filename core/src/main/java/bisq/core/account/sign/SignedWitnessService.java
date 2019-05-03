@@ -36,24 +36,35 @@ import org.bitcoinj.core.ECKey;
 
 import javax.inject.Inject;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Charsets;
 
 import java.security.PublicKey;
 import java.security.SignatureException;
 
+import java.time.Instant;
+import java.time.Period;
+import java.time.temporal.ChronoUnit;
+import java.time.temporal.TemporalUnit;
+
 import java.util.Arrays;
+import java.util.Calendar;
 import java.util.Date;
+import java.util.GregorianCalendar;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.Stack;
 import java.util.stream.Collectors;
 
 import lombok.extern.slf4j.Slf4j;
 
 @Slf4j
 public class SignedWitnessService {
+    public static final long CHARGEBACK_SAFETY_DAYS = 30;
+
     private final KeyRing keyRing;
     private final P2PService p2PService;
     private final AccountAgeWitnessService accountAgeWitnessService;
@@ -117,7 +128,7 @@ public class SignedWitnessService {
     public List<Long> getVerifiedWitnessAgeList(AccountAgeWitness accountAgeWitness) {
         return signedWitnessMap.values().stream()
                 .filter(e -> Arrays.equals(e.getWitnessHash(), accountAgeWitness.getHash()))
-                .filter(this::verify)
+                .filter(this::verifySignature)
                 .map(SignedWitness::getDate)
                 .sorted()
                 .collect(Collectors.toList());
@@ -137,7 +148,7 @@ public class SignedWitnessService {
     }
 
     // Any peer can sign with DSA key
-    public SignedWitness sign(Coin tradeAmount, AccountAgeWitness accountAgeWitness, PublicKey peersPubKey) throws CryptoException {
+    public SignedWitness signAccountAgeWitness(Coin tradeAmount, AccountAgeWitness accountAgeWitness, PublicKey peersPubKey) throws CryptoException {
         byte[] signature = Sig.sign(keyRing.getSignatureKeyPair().getPrivate(), accountAgeWitness.getHash());
         return new SignedWitness(false,
                 accountAgeWitness.getHash(),
@@ -148,15 +159,15 @@ public class SignedWitnessService {
                 tradeAmount.value);
     }
 
-    public boolean verify(SignedWitness signedWitness) {
+    public boolean verifySignature(SignedWitness signedWitness) {
         if (signedWitness.isSignedByArbitrator()) {
-            return verifyWithECKey(signedWitness);
+            return verifySignatureWithECKey(signedWitness);
         } else {
-            return verifyWithDSAKey(signedWitness);
+            return verifySignatureWithDSAKey(signedWitness);
         }
     }
 
-    private boolean verifyWithECKey(SignedWitness signedWitness) {
+    private boolean verifySignatureWithECKey(SignedWitness signedWitness) {
         try {
             String message = Utilities.encodeToHex(signedWitness.getWitnessHash());
             String signatureBase64 = new String(signedWitness.getSignature(), Charsets.UTF_8);
@@ -169,18 +180,20 @@ public class SignedWitnessService {
                 return false;
             }
         } catch (SignatureException e) {
-            log.warn("verify signedWitness failed. signedWitness={}", signedWitness);
+            log.warn("verifySignature signedWitness failed. signedWitness={}", signedWitness);
+            log.warn("Caused by ", e);
             return false;
         }
     }
 
-    private boolean verifyWithDSAKey(SignedWitness signedWitness) {
+    private boolean verifySignatureWithDSAKey(SignedWitness signedWitness) {
         try {
             PublicKey signaturePubKey = Sig.getPublicKeyFromBytes(signedWitness.getSignerPubKey());
             Sig.verify(signaturePubKey, signedWitness.getWitnessHash(), signedWitness.getSignature());
             return true;
         } catch (CryptoException e) {
-            log.warn("verify signedWitness failed. signedWitness={}", signedWitness);
+            log.warn("verifySignature signedWitness failed. signedWitness={}", signedWitness);
+            log.warn("Caused by ", e);
             return false;
         }
     }
@@ -209,43 +222,73 @@ public class SignedWitnessService {
 
     // We go one level up by using the signer Key to lookup for SignedWitness objects which contain the signerKey as
     // witnessOwnerPubKey
-    public Set<SignedWitness> getSignedWitnessSetBySignerPubKey(byte[] signerPubKey) {
+    public Set<SignedWitness> getSignedWitnessSetByOwnerPubKey(byte[] ownerPubKey, Stack<P2PDataStorage.ByteArray> excluded) {
         return signedWitnessMap.values().stream()
-                .filter(e -> Arrays.equals(e.getWitnessOwnerPubKey(), signerPubKey))
+                .filter(e -> Arrays.equals(e.getWitnessOwnerPubKey(), ownerPubKey))
+                .filter(e -> !excluded.contains(new P2PDataStorage.ByteArray(e.getSignerPubKey())))
                 .collect(Collectors.toSet());
     }
 
-    //TODO pass list and remove items once processed to avoid endless loop in case of multiple sigs
+    /**
+     * Checks whether the accountAgeWitness has a valid signature from a peer/arbitrator.
+     * @param accountAgeWitness
+     * @return true if accountAgeWitness is valid, false otherwise.
+     */
     public boolean isValidAccountAgeWitness(AccountAgeWitness accountAgeWitness) {
-        Set<SignedWitness> arbitratorsSignedWitnessSet = getArbitratorsSignedWitnessSet(accountAgeWitness);
-        if (!arbitratorsSignedWitnessSet.isEmpty()) {
-            // Our peer was signed by arbitrator. We only check it at least one is valid and don't need to go further.
-            return arbitratorsSignedWitnessSet.stream().anyMatch(this::verify);
-        } else {
-            Set<SignedWitness> trustedPeerSignedWitnessSet = getTrustedPeerSignedWitnessSet(accountAgeWitness);
-            // We have some SignedWitness signed by any trusted peer and need to see if it is valid and has a
-            // valid chain back to the arbitrators SignedWitness.
-            for (SignedWitness trustedPeerSignedWitness : trustedPeerSignedWitnessSet) {
-                if (verify(trustedPeerSignedWitness)) {
-                    // The signature is valid. Lets see who has signed it.
-                    // Get set of SignedWitness objects signer was witness owner.
-                    Set<SignedWitness> signersWitnessSet = getSignedWitnessSetBySignerPubKey(trustedPeerSignedWitness.getSignerPubKey());
-                    for (SignedWitness signersWitness : signersWitnessSet) {
-                        if (verify(signersWitness)) {
-                            Optional<AccountAgeWitness> optionalWitness = accountAgeWitnessService.getWitnessByHash(signersWitness.getWitnessHash());
-                            if (optionalWitness.isPresent()) {
-                                // Enter recursion
-                                boolean isvalid = isValidAccountAgeWitness(optionalWitness.get());
-                                if (isvalid)
-                                    return true;
-                            }
-                        }
-                    }
-                }
+        Stack<P2PDataStorage.ByteArray> excludedPubKeys = new Stack<>();
+        long now = new Date().getTime();
+        Set<SignedWitness> signedWitnessSet = getSignedWitnessSet(accountAgeWitness);
+        for (SignedWitness signedWitness : signedWitnessSet) {
+            if (isValidSignedWitnessInternal(signedWitness, now, excludedPubKeys)) {
+                return true;
             }
-            // If we have not returned in the loops or they have been empty we have not found a valid signer.
+        }
+        // If we have not returned in the loops or they have been empty we have not found a valid signer.
+        return false;
+    }
+
+    /**
+     * Helper to isValidAccountAgeWitness(accountAgeWitness)
+     * @param signedWitness the signedWitness to validate
+     * @param childSignedWitnessDateMillis the date the child SignedWitness was signed or current time if it is a leave.
+     * @param excludedPubKeys stack to preventsrecursive loops
+     * @return true if signedWitness is valid, false otherwise.
+     */
+    private boolean isValidSignedWitnessInternal(SignedWitness signedWitness, long childSignedWitnessDateMillis, Stack<P2PDataStorage.ByteArray> excludedPubKeys) {
+        if (!verifySignature(signedWitness)) {
             return false;
         }
+        if (signedWitness.isSignedByArbitrator()) {
+            // If signed by an arbitrator we don't have to check anything else.
+            return true;
+        } else {
+            if (!verifyDate(signedWitness, childSignedWitnessDateMillis)) {
+                return false;
+            }
+            if (excludedPubKeys.size() >= 2000) {
+                // Prevent DoS attack: an attacker floods the SignedWitness db with a long chain that takes lots of time to verify.ca
+                return false;
+            }
+            excludedPubKeys.push(new P2PDataStorage.ByteArray(signedWitness.getSignerPubKey()));
+            excludedPubKeys.push(new P2PDataStorage.ByteArray(signedWitness.getWitnessOwnerPubKey()));
+            // Iterate over signedWitness signers
+            Set<SignedWitness> signerSignedWitnessSet = getSignedWitnessSetByOwnerPubKey(signedWitness.getSignerPubKey(), excludedPubKeys);
+            for (SignedWitness signerSignedWitness : signerSignedWitnessSet) {
+                if (isValidSignedWitnessInternal(signerSignedWitness, signedWitness.getDate(), excludedPubKeys)) {
+                    return true;
+                }
+            }
+            excludedPubKeys.pop();
+            excludedPubKeys.pop();
+        }
+        // If we have not returned in the loops or they have been empty we have not found a valid signer.
+        return false;
+    }
+
+    private boolean verifyDate(SignedWitness signedWitness, long childSignedWitnessDateMillis) {
+        long childSignedWitnessDateMinusChargebackPeriodMillis = Instant.ofEpochMilli(childSignedWitnessDateMillis).minus(CHARGEBACK_SAFETY_DAYS, ChronoUnit.DAYS).toEpochMilli();
+        long signedWitnessDateMillis = signedWitness.getDate();
+        return signedWitnessDateMillis <= childSignedWitnessDateMinusChargebackPeriodMillis;
     }
 
 
@@ -253,8 +296,8 @@ public class SignedWitnessService {
     // Private
     ///////////////////////////////////////////////////////////////////////////////////////////
 
-
-    private void addToMap(SignedWitness signedWitness) {
+    @VisibleForTesting
+    void addToMap(SignedWitness signedWitness) {
         signedWitnessMap.putIfAbsent(signedWitness.getHashAsByteArray(), signedWitness);
     }
 }

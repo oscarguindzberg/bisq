@@ -32,6 +32,8 @@ import io.bisq.generated.protobuffer.PB;
 
 import com.google.protobuf.ByteString;
 
+import com.google.common.annotations.VisibleForTesting;
+
 import java.util.Date;
 import java.util.concurrent.TimeUnit;
 
@@ -50,7 +52,8 @@ public class AccountAgeWitness implements LazyProcessedPayload, PersistableNetwo
     private final byte[] hash;                      // Ripemd160(Sha256(concatenated accountHash, signature and sigPubKey)); 20 bytes
     private final long date;                        // 8 byte
 
-    AccountAgeWitness(byte[] hash,
+    @VisibleForTesting
+    public AccountAgeWitness(byte[] hash,
                       long date) {
         this.hash = hash;
         this.date = date;
