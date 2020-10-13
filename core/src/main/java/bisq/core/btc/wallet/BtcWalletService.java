@@ -572,28 +572,42 @@ public class BtcWalletService extends WalletService {
     }
 
     public AddressEntry getOrCreateAddressEntry(String offerId, AddressEntry.Context context) {
+        return this.getOrCreateAddressEntry(offerId, context, false);
+    }
+
+    public AddressEntry getOrCreateAddressEntry(String offerId, AddressEntry.Context context, boolean segwit) {
+        checkArgument(!segwit || AddressEntry.Context.OFFER_FUNDING.equals(context),
+                      "segwit parameter can only be true for OFFER_FUNDING addresses");
         Optional<AddressEntry> addressEntry = getAddressEntryListAsImmutableList().stream()
                 .filter(e -> offerId.equals(e.getOfferId()))
                 .filter(e -> context == e.getContext())
                 .findAny();
         if (addressEntry.isPresent()) {
-            return addressEntry.get();
-        } else {
-            // We still use non-segwit addresses for the trade protocol.
-            // We try to use available and not yet used entries
-            Optional<AddressEntry> emptyAvailableAddressEntry = getAddressEntryListAsImmutableList().stream()
-                    .filter(e -> AddressEntry.Context.AVAILABLE == e.getContext())
-                    .filter(e -> isAddressUnused(e.getAddress()))
-                    .filter(e -> Script.ScriptType.P2PKH.equals(e.getAddress().getOutputScriptType()))
-                    .findAny();
-            if (emptyAvailableAddressEntry.isPresent()) {
-                return addressEntryList.swapAvailableToAddressEntryWithOfferId(emptyAvailableAddressEntry.get(), context, offerId);
+            AddressEntry entry = addressEntry.get();
+            if (AddressEntry.Context.OFFER_FUNDING.equals(context) && (entry.isSegwit() != segwit)) {
+                // Remove the entry, we create a new one with the appropiate segwit value later in this method.
+                addressEntryList.remove(entry);
             } else {
-                DeterministicKey key = (DeterministicKey) wallet.findKeyFromAddress(wallet.freshReceiveAddress(Script.ScriptType.P2PKH));
-                AddressEntry entry = new AddressEntry(key, context, offerId, false);
-                addressEntryList.addAddressEntry(entry);
                 return entry;
             }
+        }
+        // We still use non-segwit addresses for the trade protocol.
+        // OFFER_FUNDING funding is the only exception where the segwit parameter can be set to true).
+        // We try to use available and not yet used entries
+        Script.ScriptType scriptTypeToUse = segwit ? Script.ScriptType.P2WPKH
+                                                   : Script.ScriptType.P2PKH;
+        Optional<AddressEntry> emptyAvailableAddressEntry = getAddressEntryListAsImmutableList().stream()
+                .filter(e -> AddressEntry.Context.AVAILABLE == e.getContext())
+                .filter(e -> isAddressUnused(e.getAddress()))
+                .filter(e -> scriptTypeToUse.equals(e.getAddress().getOutputScriptType()))
+                .findAny();
+        if (emptyAvailableAddressEntry.isPresent()) {
+            return addressEntryList.swapAvailableToAddressEntryWithOfferId(emptyAvailableAddressEntry.get(), context, offerId);
+        } else {
+            DeterministicKey key = (DeterministicKey) wallet.findKeyFromAddress(wallet.freshReceiveAddress(scriptTypeToUse));
+            AddressEntry entry = new AddressEntry(key, context, offerId, segwit);
+            addressEntryList.addAddressEntry(entry);
+            return entry;
         }
     }
 

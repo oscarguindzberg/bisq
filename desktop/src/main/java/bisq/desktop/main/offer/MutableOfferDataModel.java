@@ -173,7 +173,8 @@ public abstract class MutableOfferDataModel extends OfferDataModel implements Bs
 
         offerId = createOfferService.getRandomOfferId();
         shortOfferId = Utilities.getShortId(offerId);
-        addressEntry = btcWalletService.getOrCreateAddressEntry(offerId, AddressEntry.Context.OFFER_FUNDING);
+        addressEntry = btcWalletService.getOrCreateAddressEntry(offerId, AddressEntry.Context.OFFER_FUNDING,
+                                                                !preferences.isReceiveToLegacyAddress());
 
         useMarketBasedPrice.set(preferences.isUsePercentageBasedPrice());
         buyerSecurityDeposit.set(Restrictions.getMinBuyerSecurityDepositAsPercent());

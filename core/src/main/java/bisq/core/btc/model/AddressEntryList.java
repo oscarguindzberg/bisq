@@ -216,6 +216,13 @@ public final class AddressEntryList implements PersistableEnvelope, PersistedDat
         return newAddressEntry;
     }
 
+    public void remove(AddressEntry addressEntry) {
+        boolean setChangedByRemove = entrySet.remove(addressEntry);
+        if (setChangedByRemove) {
+            requestPersistence();
+        }
+    }
+
     public void requestPersistence() {
         persistenceManager.requestPersistence();
     }

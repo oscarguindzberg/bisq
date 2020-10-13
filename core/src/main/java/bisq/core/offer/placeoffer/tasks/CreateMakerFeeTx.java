@@ -60,7 +60,7 @@ public class CreateMakerFeeTx extends Task<PlaceOfferModel> {
             String id = offer.getId();
             BtcWalletService walletService = model.getWalletService();
 
-            Address fundingAddress = walletService.getOrCreateAddressEntry(id, AddressEntry.Context.OFFER_FUNDING).getAddress();
+            Address fundingAddress = walletService.getAddressEntry(id, AddressEntry.Context.OFFER_FUNDING).get().getAddress();
             Address reservedForTradeAddress = walletService.getOrCreateAddressEntry(id, AddressEntry.Context.RESERVED_FOR_TRADE).getAddress();
             Address changeAddress = walletService.getFreshAddressEntry().getAddress();
 

@@ -39,6 +39,7 @@ import org.jetbrains.annotations.NotNull;
 
 import javax.annotation.Nullable;
 
+import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 
 /**
@@ -97,9 +98,16 @@ public final class AddressEntry implements PersistablePayload {
                         Context context,
                         @Nullable String offerId,
                         boolean segwit) {
-        if (segwit && (!Context.AVAILABLE.equals(context) || offerId != null)) {
-            throw new IllegalArgumentException("Segwit addresses are only allowed for " +
-                    "AVAILABLE entries without an offerId");
+        if (Context.AVAILABLE.equals(context)) {
+            checkArgument(offerId == null, "offerId should be null");
+        } else if (Context.ARBITRATOR.equals(context)) {
+            checkArgument(offerId == null, "offerId should be null");
+            checkArgument(!segwit, "Segwit addresses are not allowed for ARBITRATOR entries");
+        } else if (Context.OFFER_FUNDING.equals(context)) {
+            checkArgument(offerId != null, "offerId should not be null");
+        } else {
+            checkArgument(!segwit, "Segwit addresses are not allowed for "  + context + " entries");
+            checkArgument(offerId != null, "offerId should not be null");
         }
         this.keyPair = keyPair;
         this.context = context;

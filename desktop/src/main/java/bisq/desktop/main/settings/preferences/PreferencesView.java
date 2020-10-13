@@ -114,7 +114,7 @@ public class PreferencesView extends ActivatableViewAndModel<GridPane, Preferenc
     private ComboBox<TradeCurrency> preferredTradeCurrencyComboBox;
 
     private ToggleButton showOwnOffersInOfferBook, useAnimations, useDarkMode, sortMarketCurrenciesNumerically,
-            avoidStandbyMode, useCustomFee, autoConfirmXmrToggle;
+            avoidStandbyMode, receiveToLegacyAddress, useCustomFee, autoConfirmXmrToggle;
     private int gridRow = 0;
     private int displayCurrenciesGridRowIndex = 0;
     private InputTextField transactionFeeInputTextField, ignoreTradersListInputTextField, ignoreDustThresholdInputTextField,
@@ -244,7 +244,7 @@ public class PreferencesView extends ActivatableViewAndModel<GridPane, Preferenc
     ///////////////////////////////////////////////////////////////////////////////////////////
 
     private void initializeGeneralOptions() {
-        int titledGroupBgRowSpan = displayStandbyModeFeature ? 9 : 8;
+        int titledGroupBgRowSpan = displayStandbyModeFeature ? 10 : 9;
         TitledGroupBg titledGroupBg = addTitledGroupBg(root, gridRow, titledGroupBgRowSpan, Res.get("setting.preferences.general"));
         GridPane.setColumnSpan(titledGroupBg, 1);
 
@@ -384,6 +384,9 @@ public class PreferencesView extends ActivatableViewAndModel<GridPane, Preferenc
             avoidStandbyMode = addSlideToggleButton(root, ++gridRow,
                     Res.get("setting.preferences.avoidStandbyMode"));
         }
+
+        receiveToLegacyAddress = addSlideToggleButton(root, ++gridRow,
+                Res.get("setting.preferences.receiveToLegacyAddress"));
     }
 
     private void initializeSeparator() {
@@ -870,6 +873,8 @@ public class PreferencesView extends ActivatableViewAndModel<GridPane, Preferenc
         useCustomFee.selectedProperty().addListener(useCustomFeeCheckboxListener);
         //referralIdInputTextField.textProperty().addListener(referralIdListener);
         ignoreDustThresholdInputTextField.textProperty().addListener(ignoreDustThresholdListener);
+        receiveToLegacyAddress.setSelected(preferences.isReceiveToLegacyAddress());
+        receiveToLegacyAddress.setOnAction(e -> preferences.setReceiveToLegacyAddress(receiveToLegacyAddress.isSelected()));
     }
 
     private Coin getTxFeeForWithdrawalPerByte() {
@@ -1070,6 +1075,7 @@ public class PreferencesView extends ActivatableViewAndModel<GridPane, Preferenc
         useCustomFee.selectedProperty().removeListener(useCustomFeeCheckboxListener);
         //referralIdInputTextField.textProperty().removeListener(referralIdListener);
         ignoreDustThresholdInputTextField.textProperty().removeListener(ignoreDustThresholdListener);
+        receiveToLegacyAddress.setOnAction(null);
     }
 
     private void deactivateDisplayCurrencies() {
