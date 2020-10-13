@@ -46,6 +46,7 @@ import bisq.desktop.main.portfolio.openoffer.OpenOffersView;
 import bisq.desktop.util.GUIUtil;
 import bisq.desktop.util.Layout;
 
+import bisq.core.btc.model.AddressEntry;
 import bisq.core.locale.CurrencyUtil;
 import bisq.core.locale.Res;
 import bisq.core.locale.TradeCurrency;
@@ -61,11 +62,15 @@ import bisq.core.util.coin.CoinFormatter;
 
 import bisq.common.UserThread;
 import bisq.common.app.DevEnv;
+import bisq.common.config.Config;
 import bisq.common.util.Tuple2;
 import bisq.common.util.Tuple3;
 import bisq.common.util.Utilities;
 
+import org.bitcoinj.core.Address;
 import org.bitcoinj.core.Coin;
+import org.bitcoinj.core.NetworkParameters;
+import org.bitcoinj.core.SegwitAddress;
 
 import net.glxn.qrgen.QRCode;
 import net.glxn.qrgen.image.ImageType;
@@ -74,6 +79,7 @@ import de.jensd.fx.glyphs.materialdesignicons.MaterialDesignIcon;
 
 import javafx.scene.Node;
 import javafx.scene.control.Button;
+import javafx.scene.control.CheckBox;
 import javafx.scene.control.ComboBox;
 import javafx.scene.control.Label;
 import javafx.scene.control.ScrollPane;
@@ -141,6 +147,7 @@ public abstract class MutableOfferView<M extends MutableOfferViewModel<?>> exten
     protected InputTextField amountTextField, minAmountTextField, volumeTextField, buyerSecurityDepositInputTextField;
     private TextField currencyTextField;
     private AddressTextField addressTextField;
+    private CheckBox addressSegwitCheckbox;
     private BalanceTextField balanceTextField;
     private FundsTextField totalToPayTextField;
     private Label amountDescriptionLabel, priceCurrencyLabel, priceDescriptionLabel, volumeDescriptionLabel,
@@ -266,6 +273,12 @@ public abstract class MutableOfferView<M extends MutableOfferViewModel<?>> exten
                 tradeFeeInBsqToggle.setManaged(false);
             }
         }
+    }
+
+    protected void updateAddressType() {
+        boolean segwit = addressSegwitCheckbox.isSelected();
+        model.updateAddressType(segwit);
+        addressTextField.setAddress(model.getAddressAsString());
     }
 
     @Override
@@ -453,6 +466,7 @@ public abstract class MutableOfferView<M extends MutableOfferViewModel<?>> exten
         payFundsTitledGroupBg.setVisible(true);
         totalToPayTextField.setVisible(true);
         addressTextField.setVisible(true);
+        addressSegwitCheckbox.setVisible(true);
         qrCodeImageView.setVisible(true);
         balanceTextField.setVisible(true);
         cancelButton2.setVisible(true);
@@ -1183,6 +1197,12 @@ public abstract class MutableOfferView<M extends MutableOfferViewModel<?>> exten
         addressTextField = addAddressTextField(gridPane, ++gridRow,
                 Res.get("shared.tradeWalletAddress"));
         addressTextField.setVisible(false);
+        addressSegwitCheckbox = addCheckBox(gridPane, ++gridRow,
+                Res.get("shared.tradeWalletAddressSegwit"));
+        addressSegwitCheckbox.setAllowIndeterminate(false);
+        addressSegwitCheckbox.setSelected(true);
+        addressSegwitCheckbox.setVisible(false);
+        addressSegwitCheckbox.setOnAction(event -> updateAddressType());
 
         balanceTextField = addBalanceTextField(gridPane, ++gridRow,
                 Res.get("shared.tradeWalletBalance"));

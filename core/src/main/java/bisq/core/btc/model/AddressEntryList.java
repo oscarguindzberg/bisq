@@ -216,6 +216,17 @@ public final class AddressEntryList implements PersistableEnvelope, PersistedDat
         return newAddressEntry;
     }
 
+    public AddressEntry swapSegwit(AddressEntry addressEntry,
+                                  boolean segwit) {
+        boolean setChangedByRemove = entrySet.remove(addressEntry);
+        final AddressEntry newAddressEntry = new AddressEntry(addressEntry.getKeyPair(), addressEntry.getContext(), addressEntry.getOfferId(), segwit);
+        boolean setChangedByAdd = entrySet.add(newAddressEntry);
+        if (setChangedByRemove || setChangedByAdd)
+            requestPersistence();
+
+        return newAddressEntry;
+    }
+
     public void requestPersistence() {
         persistenceManager.requestPersistence();
     }

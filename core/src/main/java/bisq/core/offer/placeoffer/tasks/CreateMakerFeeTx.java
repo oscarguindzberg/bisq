@@ -37,6 +37,8 @@ import bisq.common.taskrunner.TaskRunner;
 import org.bitcoinj.core.Address;
 import org.bitcoinj.core.Transaction;
 
+import java.util.Optional;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -60,7 +62,7 @@ public class CreateMakerFeeTx extends Task<PlaceOfferModel> {
             String id = offer.getId();
             BtcWalletService walletService = model.getWalletService();
 
-            Address fundingAddress = walletService.getOrCreateAddressEntry(id, AddressEntry.Context.OFFER_FUNDING).getAddress();
+            Address fundingAddress = walletService.getAddressEntry(id, AddressEntry.Context.OFFER_FUNDING).get().getAddress();
             Address reservedForTradeAddress = walletService.getOrCreateAddressEntry(id, AddressEntry.Context.RESERVED_FOR_TRADE).getAddress();
             Address changeAddress = walletService.getFreshAddressEntry().getAddress();
 

@@ -171,7 +171,7 @@ public abstract class MutableOfferDataModel extends OfferDataModel implements Bs
 
         offerId = createOfferService.getRandomOfferId();
         shortOfferId = Utilities.getShortId(offerId);
-        addressEntry = btcWalletService.getOrCreateAddressEntry(offerId, AddressEntry.Context.OFFER_FUNDING);
+        addressEntry = btcWalletService.getOrCreateAddressEntry(offerId, AddressEntry.Context.OFFER_FUNDING, Optional.of(true));
 
         useMarketBasedPrice.set(preferences.isUsePercentageBasedPrice());
         buyerSecurityDeposit.set(Restrictions.getMinBuyerSecurityDepositAsPercent());
@@ -772,5 +772,9 @@ public abstract class MutableOfferDataModel extends OfferDataModel implements Bs
 
     public boolean isMinBuyerSecurityDeposit() {
         return !getBuyerSecurityDepositAsCoin().isGreaterThan(Restrictions.getMinBuyerSecurityDepositAsCoin());
+    }
+
+    public void updateAddressType(boolean segwit) {
+        addressEntry = btcWalletService.getOrCreateAddressEntry(offerId, AddressEntry.Context.OFFER_FUNDING, Optional.of(segwit));
     }
 }

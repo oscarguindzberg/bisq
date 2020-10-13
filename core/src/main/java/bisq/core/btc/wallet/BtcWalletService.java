@@ -27,6 +27,7 @@ import bisq.core.btc.setup.WalletsSetup;
 import bisq.core.provider.fee.FeeService;
 import bisq.core.user.Preferences;
 
+import bisq.common.config.Config;
 import bisq.common.handlers.ErrorMessageHandler;
 
 import org.bitcoinj.core.Address;
@@ -572,25 +573,39 @@ public class BtcWalletService extends WalletService {
     }
 
     public AddressEntry getOrCreateAddressEntry(String offerId, AddressEntry.Context context) {
+        return this.getOrCreateAddressEntry(offerId, context, Optional.empty());
+    }
+
+    public AddressEntry getOrCreateAddressEntry(String offerId, AddressEntry.Context context, Optional<Boolean> segwit) {
+        checkArgument(!segwit.isPresent() || AddressEntry.Context.OFFER_FUNDING.equals(context),
+                      "segwit parameter can only be supplied for OFFER_FUNDING addresses");
         Optional<AddressEntry> addressEntry = getAddressEntryListAsImmutableList().stream()
                 .filter(e -> offerId.equals(e.getOfferId()))
                 .filter(e -> context == e.getContext())
                 .findAny();
         if (addressEntry.isPresent()) {
-            return addressEntry.get();
+            AddressEntry entry = addressEntry.get();
+            if (segwit.isPresent() && entry.isSegwit() != segwit.get()) {
+                return addressEntryList.swapSegwit(entry, segwit.get());
+            } else {
+                return entry;
+            }
         } else {
-            // We still use non-segwit addresses for the trade protocol.
+            // We still use non-segwit addresses for the trade protocol (OFFER_FUNDING funding is the only
+            // exception where a segwit parameter can provided)
             // We try to use available and not yet used entries
+            Script.ScriptType scriptTypeToUse = segwit.isPresent() && segwit.get() ? Script.ScriptType.P2WPKH
+                                                                                   : Script.ScriptType.P2PKH;
             Optional<AddressEntry> emptyAvailableAddressEntry = getAddressEntryListAsImmutableList().stream()
                     .filter(e -> AddressEntry.Context.AVAILABLE == e.getContext())
                     .filter(e -> isAddressUnused(e.getAddress()))
-                    .filter(e -> Script.ScriptType.P2PKH.equals(e.getAddress().getOutputScriptType()))
+                    .filter(e -> scriptTypeToUse.equals(e.getAddress().getOutputScriptType()))
                     .findAny();
             if (emptyAvailableAddressEntry.isPresent()) {
                 return addressEntryList.swapAvailableToAddressEntryWithOfferId(emptyAvailableAddressEntry.get(), context, offerId);
             } else {
-                DeterministicKey key = (DeterministicKey) wallet.findKeyFromAddress(wallet.freshReceiveAddress(Script.ScriptType.P2PKH));
-                AddressEntry entry = new AddressEntry(key, context, offerId, false);
+                DeterministicKey key = (DeterministicKey) wallet.findKeyFromAddress(wallet.freshReceiveAddress(scriptTypeToUse));
+                AddressEntry entry = new AddressEntry(key, context, offerId, Script.ScriptType.P2WPKH.equals(scriptTypeToUse));
                 addressEntryList.addAddressEntry(entry);
                 return entry;
             }

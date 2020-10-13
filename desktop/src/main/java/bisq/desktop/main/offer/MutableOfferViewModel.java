@@ -1278,4 +1278,13 @@ public abstract class MutableOfferViewModel<M extends MutableOfferDataModel> ext
             }
         }
     }
+
+    public void updateAddressType(boolean segwit) {
+        if (dataModel.getAddressEntry() != null) {
+            dataModel.updateAddressType(segwit);
+            addressAsString = dataModel.getAddressEntry().getAddressString();
+            address.set(dataModel.getAddressEntry().getAddress());
+        }
+    }
+
 }
