@@ -190,7 +190,7 @@ public final class PaymentMethod implements PersistablePayload, Comparable<Payme
             PROMPT_PAY = new PaymentMethod(PROMPT_PAY_ID, DAY, DEFAULT_TRADE_LIMIT_LOW_RISK),
 
             // Altcoins
-            BLOCK_CHAINS = new PaymentMethod(BLOCK_CHAINS_ID, DAY, DEFAULT_TRADE_LIMIT_VERY_LOW_RISK),
+            BLOCK_CHAINS = new PaymentMethod(BLOCK_CHAINS_ID, TimeUnit.MINUTES.toMillis(1), DEFAULT_TRADE_LIMIT_VERY_LOW_RISK),
             // Altcoins with 1 hour trade period
             BLOCK_CHAINS_INSTANT = new PaymentMethod(BLOCK_CHAINS_INSTANT_ID, TimeUnit.HOURS.toMillis(1), DEFAULT_TRADE_LIMIT_VERY_LOW_RISK)
     ));
