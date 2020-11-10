@@ -103,7 +103,11 @@ class BsqTxListItem extends TxConfidenceListItem {
                     WalletService.isOutputScriptConvertibleToAddress(output)) {
                 // We don't support send txs with multiple outputs to multiple receivers, so we can
                 // assume that only one output is not from our own wallets.
-                sendToAddress = bsqFormatter.getBsqAddressStringFromAddress((LegacyAddress) WalletService.getAddressFromOutput(output));
+                if (WalletService.getAddressFromOutput(output) instanceof LegacyAddress) {
+                    sendToAddress = bsqFormatter.getBsqAddressStringFromAddress((LegacyAddress) WalletService.getAddressFromOutput(output));
+                } else {
+                    sendToAddress = "Found a segwit address";
+                }
                 break;
             }
         }
